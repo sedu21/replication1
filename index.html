@@ -1,0 +1,625 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>RNA 전사 시뮬레이터 (Copy)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: lab-bench console — one wide simulation stage, narration + sequence readout beneath, tabs for practice and quiz */
+:root{
+  --bg:#edf2f0; --panel:#ffffff; --panel-2:#f5f8f7; --ink:#14211c; --muted:#5a6b64; --line:#d2ddd8;
+  --accent:#1d7560; --accent-ink:#ffffff; --pol-fill:rgba(29,117,96,.14); --pol-stroke:rgba(29,117,96,.55);
+  --shade:rgba(20,33,28,.06); --term:rgba(176,84,60,.09);
+  --A:#d24c42; --T:#d9961f; --U:#8655cc; --G:#4a9433; --C:#3169c4; --base-ink:#ffffff;
+  --ok:#1d7d4a; --ok-bg:#e3f3ea; --bad:#b33a2e; --bad-bg:#fbe9e6; --warn-bg:#fff4dd;
+  --f-body:"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1613; --panel:#15201c; --panel-2:#1a2723; --ink:#e2ece7; --muted:#93a59d; --line:#2a3a34;
+  --accent:#46b592; --accent-ink:#06120e; --pol-fill:rgba(70,181,146,.13); --pol-stroke:rgba(70,181,146,.55);
+  --shade:rgba(226,236,231,.05); --term:rgba(230,130,100,.09);
+  --A:#e0645a; --T:#e2a83a; --U:#a07ae0; --G:#62ad4a; --C:#4e86dc; --base-ink:#0b120f;
+  --ok:#5fd394; --ok-bg:#163126; --bad:#f08a7e; --bad-bg:#3a1d19; --warn-bg:#34290f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1613; --panel:#15201c; --panel-2:#1a2723; --ink:#e2ece7; --muted:#93a59d; --line:#2a3a34;
+  --accent:#46b592; --accent-ink:#06120e; --pol-fill:rgba(70,181,146,.13); --pol-stroke:rgba(70,181,146,.55);
+  --shade:rgba(226,236,231,.05); --term:rgba(230,130,100,.09);
+  --A:#e0645a; --T:#e2a83a; --U:#a07ae0; --G:#62ad4a; --C:#4e86dc; --base-ink:#0b120f;
+  --ok:#5fd394; --ok-bg:#163126; --bad:#f08a7e; --bad-bg:#3a1d19; --warn-bg:#34290f; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:20px;padding-block:28px 56px;display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-direction:column;gap:6px}
+.eyebrow{margin:0;font-size:12px;letter-spacing:.12em;color:var(--accent);font-weight:600}
+h1{margin:0;font-size:clamp(26px,4vw,36px);line-height:1.2;font-weight:700;text-wrap:balance;letter-spacing:-.01em}
+h1 .mono{font-family:var(--f-mono);font-weight:700;color:var(--accent)}
+.lede{margin:0;color:var(--muted);max-width:62ch}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-top:10px;border-bottom:1px solid var(--line)}
+.tabs button{font:inherit;font-weight:600;background:none;border:0;color:var(--muted);padding:10px 14px;border-bottom:2px solid transparent;cursor:pointer;margin-bottom:-1px}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs button:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.stages{display:flex;gap:8px;flex-wrap:wrap}
+.stage{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-weight:600;font-size:14px}
+.stage b{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--panel-2);font-size:12px}
+.stage.on{border-color:var(--accent);color:var(--ink)}
+.stage.on b{background:var(--accent);color:var(--accent-ink)}
+.stage.done b{background:var(--pol-fill);color:var(--accent)}
+
+.stagecard{overflow:hidden}
+.svgbox{overflow-x:auto;background:var(--panel)}
+#sim{display:block;width:100%;min-width:720px;height:auto}
+#sim text{font-family:var(--f-body)}
+#sim .bb{fill:none;stroke:var(--muted);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+#sim .bb.rna{stroke:var(--U);stroke-width:3.5}
+#sim .lt{font-family:var(--f-mono);font-weight:700;font-size:12px;fill:var(--base-ink);text-anchor:middle;dominant-baseline:central}
+#sim .end{font-family:var(--f-mono);font-size:13px;font-weight:700;fill:var(--muted);text-anchor:middle;dominant-baseline:central}
+#sim .end.rna{fill:var(--U)}
+#sim .cap{font-size:12px;fill:var(--muted);font-weight:600}
+#sim .polb{stroke:var(--pol-stroke);stroke-width:2.5;stroke-linejoin:round}
+#sim .lobe{fill:var(--accent);fill-opacity:.08;stroke:var(--pol-stroke);stroke-width:1.3;stroke-opacity:.7}
+#sim .groove{fill:var(--ink);fill-opacity:.07}
+#sim .shine{fill:var(--panel);fill-opacity:.4}
+#sim .sub{font-size:12px;font-weight:700;fill:var(--accent);opacity:.75;text-anchor:middle}
+#sim .poltxt{font-size:13px;font-weight:700;fill:var(--accent);text-anchor:middle}
+#sim .prom{fill:var(--shade)}
+#sim .term{fill:var(--term)}
+#sim .hl{fill:none;stroke:var(--ink);stroke-width:2;stroke-dasharray:4 3}
+#sim .arrow{stroke:var(--accent);stroke-width:2;fill:none}
+#sim .arrowtxt{font-size:12px;fill:var(--accent);font-weight:700}
+
+.controls{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--line);background:var(--panel-2)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+.seg button{font:inherit;font-size:14px;font-weight:600;border:0;background:none;color:var(--muted);padding:7px 12px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.btns{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.btn{font:inherit;font-size:14px;font-weight:600;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);min-width:84px}
+.speed{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.speed input{accent-color:var(--accent);width:100px}
+
+.lower{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:20px}
+@media (max-width:820px){.lower{grid-template-columns:minmax(0,1fr)}}
+.narr{padding:18px 20px;display:flex;flex-direction:column;gap:10px}
+.stepnum{margin:0;font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.06em;font-variant-numeric:tabular-nums}
+.narr h2{margin:0;font-size:19px;line-height:1.35;text-wrap:balance}
+.narr p.body{margin:0;color:var(--ink)}
+.term-note{font-size:13px;color:var(--muted);border-left:3px solid var(--line);padding-left:10px;margin:0}
+.pad{display:flex;flex-direction:column;gap:8px;padding-top:6px;border-top:1px dashed var(--line)}
+.pad .q{margin:0;font-size:14px;font-weight:600}
+.pad .keys{display:flex;gap:8px;flex-wrap:wrap}
+.key{font-family:var(--f-mono);font-weight:700;font-size:18px;width:52px;height:52px;border-radius:10px;border:0;color:var(--base-ink);cursor:pointer;transition:transform .08s}
+.key:active{transform:scale(.94)}
+.key:disabled{opacity:.3;cursor:not-allowed}
+.key small{display:block;font-family:var(--f-body);font-size:9px;font-weight:600;opacity:.9;margin-top:-2px}
+.fb{font-size:14px;padding:8px 12px;border-radius:8px;margin:0}
+.fb.ok{background:var(--ok-bg);color:var(--ok)}
+.fb.bad{background:var(--bad-bg);color:var(--bad)}
+.fb.info{background:var(--warn-bg);color:var(--ink)}
+
+.readout{padding:18px 20px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.readout h3,.card h3{margin:0;font-size:15px}
+.seqbox{overflow-x:auto;padding-bottom:4px}
+.seqrow{display:flex;align-items:center;gap:10px;white-space:nowrap;font-family:var(--f-mono);font-size:14px;line-height:1.9}
+.seqrow .lab{font-family:var(--f-body);font-size:12px;color:var(--muted);width:78px;flex:none;font-weight:600}
+.seqrow .dir{color:var(--muted);font-weight:700}
+.seqrow .ch{display:inline-block;width:1.25ch;text-align:center}
+.seqrow .ch.g{border-bottom:2px solid var(--line)}
+.seqrow .ch.cur{background:var(--warn-bg);border-radius:3px}
+.cA{color:var(--A)}.cT{color:var(--T)}.cU{color:var(--U)}.cG{color:var(--G)}.cC{color:var(--C)}
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:14px;height:14px;border-radius:3px;display:inline-block}
+.tip{margin:0;font-size:13px;color:var(--muted)}
+
+/* practice */
+.practice{padding:22px;display:flex;flex-direction:column;gap:16px;max-width:760px}
+.given{font-family:var(--f-mono);font-size:clamp(16px,3.4vw,22px);font-weight:700;letter-spacing:.06em;overflow-x:auto;white-space:nowrap;padding:12px 14px;background:var(--panel-2);border-radius:8px}
+.given .lbl{font-family:var(--f-body);font-size:12px;letter-spacing:0;color:var(--muted);display:block;font-weight:600}
+.ansrow{display:flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:18px;font-weight:700;flex-wrap:wrap}
+.ansrow input{font-family:var(--f-mono);font-size:18px;font-weight:700;letter-spacing:.08em;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);width:min(18ch,100%);text-transform:uppercase}
+.explain{font-size:14px;background:var(--panel-2);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.explain code{font-family:var(--f-mono);font-weight:700}
+.statline{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* quiz */
+.qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px}
+.card{padding:18px 20px;display:flex;flex-direction:column;gap:10px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:600;font-size:12px}
+.rtypes{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none;font-size:14px}
+.rtypes b{font-family:var(--f-mono);color:var(--U)}
+.quiz{display:flex;flex-direction:column;gap:12px}
+.qitem{padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.qitem p{margin:0;font-weight:600}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opt{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.opt:hover:not(:disabled){border-color:var(--accent)}
+.opt.right{background:var(--ok-bg);border-color:var(--ok);color:var(--ok);font-weight:600}
+.opt.wrong{background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
+.opt:disabled{cursor:default}
+.qexp{font-size:13px;color:var(--muted);margin:0}
+.quizhead{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.score{font-weight:700;font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion: reduce){.key{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">생명과학 · 유전자 발현</p>
+    <h1>RNA 전사 시뮬레이터 <span class="mono">DNA → RNA</span></h1>
+    <p class="lede">RNA 중합 효소가 프로모터에 결합하는 순간부터 RNA가 떨어져 나오기까지 한 단계씩 따라가 보세요. ‘직접 합성’ 모드에서는 주형 가닥을 보고 RNA 뉴클레오타이드를 직접 골라 붙입니다.</p>
+    <nav class="tabs" role="tablist" aria-label="학습 메뉴">
+      <button role="tab" id="t-sim" aria-selected="true" aria-controls="p-sim">전사 시뮬레이션</button>
+      <button role="tab" id="t-prac" aria-selected="false" aria-controls="p-prac">서열 변환 연습</button>
+      <button role="tab" id="t-quiz" aria-selected="false" aria-controls="p-quiz">핵심 정리 · 퀴즈</button>
+    </nav>
+  </header>
+
+  <!-- SIMULATION -->
+  <section id="p-sim" role="tabpanel" aria-labelledby="t-sim" style="display:flex;flex-direction:column;gap:16px">
+    <div class="stages" id="stages">
+      <span class="stage" data-s="1"><b>1</b>개시</span>
+      <span class="stage" data-s="2"><b>2</b>신장</span>
+      <span class="stage" data-s="3"><b>3</b>종결</span>
+    </div>
+
+    <div class="panel stagecard">
+      <div class="svgbox"><svg id="sim" viewBox="0 0 960 430" role="img" aria-label="전사 과정 애니메이션"></svg></div>
+      <div class="controls">
+        <div class="seg" role="group" aria-label="모드">
+          <button id="m-auto" aria-pressed="true">자동 관찰</button>
+          <button id="m-man" aria-pressed="false">직접 합성</button>
+        </div>
+        <div class="btns">
+          <button class="btn" id="b-reset">처음으로</button>
+          <button class="btn" id="b-prev">이전</button>
+          <button class="btn primary" id="b-play">재생</button>
+          <button class="btn" id="b-next">다음</button>
+        </div>
+        <label class="speed" for="spd">속도 <input type="range" id="spd" min="0.5" max="2.5" step="0.25" value="1"><span id="spdv">1×</span></label>
+      </div>
+    </div>
+
+    <div class="lower">
+      <div class="panel narr" aria-live="polite">
+        <p class="stepnum" id="nNum"></p>
+        <h2 id="nTitle"></h2>
+        <p class="body" id="nBody"></p>
+        <p class="term-note" id="nNote" hidden></p>
+        <div class="pad" id="pad" hidden>
+          <p class="q" id="padQ"></p>
+          <div class="keys" id="keys"></div>
+          <p class="fb" id="fb" hidden></p>
+        </div>
+      </div>
+
+      <div class="panel readout">
+        <h3>염기 서열 기록</h3>
+        <div class="seqbox"><div id="seq"></div></div>
+        <div class="legend">
+          <span><i style="background:var(--A)"></i>A 아데닌</span>
+          <span><i style="background:var(--T)"></i>T 티민</span>
+          <span><i style="background:var(--U)"></i>U 우라실</span>
+          <span><i style="background:var(--G)"></i>G 구아닌</span>
+          <span><i style="background:var(--C)"></i>C 사이토신</span>
+        </div>
+        <p class="tip">합성된 RNA는 비주형 가닥과 같은 서열이며 T 자리에 U가 들어갑니다. 키보드: ← → 로 단계 이동, 직접 합성 모드에서는 A·U·G·C·T 키로 선택.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRACTICE -->
+  <section id="p-prac" role="tabpanel" aria-labelledby="t-prac" hidden>
+    <div class="panel practice">
+      <div>
+        <h3 style="margin:0 0 4px;font-size:17px">주형 가닥 → mRNA 서열 쓰기</h3>
+        <p class="tip" style="font-size:14px">RNA는 주형 가닥과 <b>상보적</b>이고 <b>역평행</b>입니다. 방향 표시(5′, 3′)에 주의해서 답을 쓰세요.</p>
+      </div>
+      <div class="given" id="pGiven"></div>
+      <p style="margin:0;font-weight:600" id="pAsk"></p>
+      <form id="pForm" class="ansrow" autocomplete="off">
+        <span id="pL"></span><input id="pIn" maxlength="24" aria-label="mRNA 염기 서열" placeholder="염기 입력"><span id="pR"></span>
+        <button class="btn primary" type="submit">확인</button>
+        <button class="btn" type="button" id="pShow">정답 보기</button>
+        <button class="btn" type="button" id="pNew">새 문제</button>
+      </form>
+      <p class="fb" id="pFb" hidden></p>
+      <div class="explain" id="pExp" hidden></div>
+      <p class="statline" id="pStat">맞힌 문제 0 · 연속 정답 0</p>
+    </div>
+  </section>
+
+  <!-- QUIZ -->
+  <section id="p-quiz" role="tabpanel" aria-labelledby="t-quiz" hidden style="flex-direction:column;gap:20px">
+    <div class="qgrid">
+      <div class="panel card">
+        <h3>DNA와 RNA 비교</h3>
+        <table>
+          <thead><tr><th></th><th>DNA</th><th>RNA</th></tr></thead>
+          <tbody>
+            <tr><td>가닥</td><td>이중 나선</td><td>단일 가닥 폴리뉴클레오타이드</td></tr>
+            <tr><td>당</td><td>디옥시리보스</td><td>리보스</td></tr>
+            <tr><td>염기</td><td>A, G, C, <b class="cT">T</b></td><td>A, G, C, <b class="cU">U</b></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel card">
+        <h3>전사되는 RNA의 종류</h3>
+        <ul class="rtypes">
+          <li><b>mRNA</b> DNA 염기 서열에 저장된 단백질 합성 정보를 전달</li>
+          <li><b>rRNA</b> 단백질을 합성하는 세포 소기관인 리보솜을 구성</li>
+          <li><b>tRNA</b> 단백질 합성에 필요한 아미노산을 리보솜으로 운반</li>
+        </ul>
+      </div>
+      <div class="panel card">
+        <h3>전사 과정 한 줄 요약</h3>
+        <ul class="rtypes" style="color:var(--ink)">
+          <li><b style="color:var(--accent)">개시</b> RNA 중합 효소가 프로모터에 결합 → 이중 나선을 풂</li>
+          <li><b style="color:var(--accent)">신장</b> 한쪽 가닥(주형)에 상보적인 뉴클레오타이드를 5′→3′ 방향으로 결합</li>
+          <li><b style="color:var(--accent)">종결</b> RNA와 RNA 중합 효소 분리, DNA는 다시 이중 나선</li>
+        </ul>
+      </div>
+    </div>
+    <div class="quiz">
+      <div class="quizhead"><h3 style="margin:0;font-size:17px">확인 퀴즈</h3><div style="display:flex;gap:10px;align-items:center"><span class="score" id="qScore">0 / 8</span><button class="btn" id="qReset">다시 풀기</button></div></div>
+      <div id="qList" class="quiz"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+/* ---------- sequence model ---------- */
+const PRE="CGTATAATCG", GENE="ATGGAACTTAGCTGA", POST="TTTT";
+const CODING=PRE+GENE+POST, N=CODING.length, START=PRE.length, GLEN=GENE.length, END=START+GLEN-1;
+const COMP={A:'T',T:'A',G:'C',C:'G'}, TO_RNA={A:'U',T:'A',G:'C',C:'G'};
+const TEMPLATE=[...CODING].map(b=>COMP[b]).join('');
+const RNA=GENE.replace(/T/g,'U');
+const PROM=[2,7], TERM=[END+1,N-1];
+const X=i=>60+i*30, MID=270;
+const NAME={A:'아데닌',T:'티민',U:'우라실',G:'구아닌',C:'사이토신'};
+
+/* ---------- states ---------- */
+const S=[];
+S.push({px:4.5,py:-150,pa:.4,open:0,rna:0,rel:0});
+S.push({px:4.5,py:0,pa:1,open:0,rna:0,rel:0});
+S.push({px:START-1,py:0,pa:1,open:1,rna:0,rel:0});
+for(let k=1;k<=GLEN;k++) S.push({px:START+k-1,py:0,pa:1,open:1,rna:k,rel:0});
+S.push({px:END+2,py:0,pa:1,open:1,rna:GLEN,rel:0});
+S.push({px:N+1.5,py:-90,pa:0,open:0,rna:GLEN,rel:1});
+const LAST=S.length-1, ELO0=3, ELO1=2+GLEN; // elongation step indices
+
+/* ---------- helpers ---------- */
+const lerp=(a,b,t)=>a+(b-a)*t, clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const smooth=t=>t*t*(3-2*t);
+function sep(c,st){
+  if(st.open<=0) return 0;
+  const d=c-st.px; let w;
+  if(d>=-6&&d<=2) w=1; else if(d<-6) w=clamp(1-(-6-d),0,1); else w=clamp(1-(d-2),0,1);
+  return smooth(w)*st.open;
+}
+function baseRect(x,y,h,b,extra){
+  return `<rect x="${x-9}" y="${y}" width="18" height="${h}" rx="3" fill="var(--${b})"${extra||''}/><text class="lt" x="${x}" y="${y+h/2}"${extra||''}>${b}</text>`;
+}
+
+/* ---------- draw ---------- */
+const svg=document.getElementById('sim');
+function draw(st,hl,showArrow){
+  let h='';
+  // regions
+  const rw=(a,b)=>(b-a)*30+28;
+  h+=`<rect class="prom" x="${X(PROM[0])-14}" y="${MID-96}" width="${rw(PROM[0],PROM[1])}" height="192" rx="8"/>`;
+  h+=`<text class="cap" x="${(X(PROM[0])+X(PROM[1]))/2}" y="${MID+114}" text-anchor="middle">프로모터</text>`;
+  h+=`<rect class="term" x="${X(TERM[0])-14}" y="${MID-96}" width="${rw(TERM[0],TERM[1])}" height="192" rx="8"/>`;
+  h+=`<text class="cap" x="${(X(TERM[0])+X(TERM[1]))/2}" y="${MID+114}" text-anchor="middle">종결 부위</text>`;
+  // polymerase (behind DNA)
+  const ex=X(st.px)+12, ey=MID+st.py;
+  if(st.pa>0.01){
+    h+=`<defs><radialGradient id="polg" cx="35%" cy="28%" r="80%"><stop offset="0" style="stop-color:var(--accent);stop-opacity:.36"/><stop offset="1" style="stop-color:var(--accent);stop-opacity:.07"/></radialGradient>`;
+    h+=`<path id="polb" d="M-170 10C-178-60-130-105-60-108C-20-125 40-122 80-100C140-95 180-50 172 5C178 60 140 105 80 108C30 125-30 122-70 105C-140 100-176 60-170 10Z"/></defs>`;
+    h+=`<g opacity="${st.pa.toFixed(3)}" transform="translate(${ex} ${ey})">`;
+    h+=`<circle class="lobe" cx="-172" cy="-26" r="24"/><circle class="lobe" cx="-172" cy="28" r="24"/>`;
+    h+=`<use href="#polb" class="polb" fill="url(#polg)"/>`;
+    h+=`<circle class="lobe" cx="-82" cy="-60" r="50"/><circle class="lobe" cx="78" cy="-62" r="54"/>`;
+    h+=`<circle class="lobe" cx="-84" cy="64" r="46"/><circle class="lobe" cx="82" cy="66" r="50"/>`;
+    h+=`<ellipse class="groove" cx="0" cy="0" rx="150" ry="48"/>`;
+    h+=`<ellipse class="shine" cx="-60" cy="-92" rx="70" ry="9" transform="rotate(-8 -60 -92)"/>`;
+    h+=`<text class="sub" x="-172" y="-22">α</text><text class="sub" x="-172" y="32">α</text>`;
+    h+=`<text class="sub" x="-82" y="-94">β</text><text class="sub" x="78" y="-96">β′</text>`;
+    h+=`<text class="poltxt" x="0" y="100">RNA 중합 효소</text></g>`;
+  }
+  // DNA
+  let top=[],bot=[],bases='';
+  for(let c=0;c<N;c++){
+    const s=sep(c,st), x=X(c);
+    const yT=lerp(MID-34,MID-80,s), yB=lerp(MID+34,MID+80,s);
+    const lT=lerp(34,28,s);
+    top.push(`${x},${yT.toFixed(1)}`); bot.push(`${x},${yB.toFixed(1)}`);
+    bases+=baseRect(x,yT,lT,CODING[c]);
+    bases+=baseRect(x,yB-34,34,TEMPLATE[c]);
+    if(hl===c) bases+=`<rect class="hl" x="${x-13}" y="${yB-38}" width="26" height="42" rx="5"/>`;
+  }
+  h+=bases;
+  h+=`<polyline class="bb" points="${top.join(' ')}"/><polyline class="bb" points="${bot.join(' ')}"/>`;
+  // polymerase front layer: DNA appears to run through the enzyme
+  if(st.pa>0.01){
+    h+=`<g opacity="${st.pa.toFixed(3)}" transform="translate(${ex} ${ey})" pointer-events="none"><use href="#polb" style="fill:var(--accent);fill-opacity:.09"/>`;
+    if(st.rna>0&&st.rel<.5) h+=`<circle cx="-12" cy="29" r="19" style="fill:var(--U);fill-opacity:.16;stroke:var(--U);stroke-width:2;stroke-dasharray:3 3"/>`;
+    h+=`</g>`;
+  }
+  // strand end labels
+  const s0=sep(0,st), sN=sep(N-1,st);
+  h+=`<text class="end" x="${X(0)-30}" y="${lerp(MID-34,MID-80,s0)}">5′</text><text class="end" x="${X(0)-30}" y="${lerp(MID+34,MID+80,s0)}">3′</text>`;
+  h+=`<text class="end" x="${X(N-1)+30}" y="${lerp(MID-34,MID-80,sN)}">3′</text><text class="end" x="${X(N-1)+30}" y="${lerp(MID+34,MID+80,sN)}">5′</text>`;
+  h+=`<text class="cap" x="${X(0)-10}" y="${MID-50}">비주형 가닥</text><text class="cap" x="${X(0)-10}" y="${MID+60}">주형 가닥</text>`;
+  // RNA
+  const n=Math.ceil(st.rna-1e-6); let pts=[], rb='', first=null, lastP=null;
+  for(let j=0;j<n;j++){
+    const c=START+j, x=X(c), a=clamp(st.rna-j,0,1), s=sep(c,st);
+    const lift=1-s;
+    const yR=lerp(MID+12,MID-150,lift)-st.rel*36+(1-a)*44;
+    const len=lerp(34,26,lift);
+    pts.push(`${x},${yR.toFixed(1)}`);
+    rb+=`<g opacity="${a.toFixed(3)}">${baseRect(x,yR,len,RNA[j])}</g>`;
+    if(j===0) first=[x,yR]; lastP=[x,yR];
+  }
+  if(n>0){
+    h+=rb+`<polyline class="bb rna" points="${pts.join(' ')}"/>`;
+    h+=`<text class="end rna" x="${first[0]-24}" y="${first[1]}">5′</text>`;
+    if(n>1) h+=`<text class="end rna" x="${lastP[0]+24}" y="${lastP[1]}">3′</text>`;
+    if(st.rel>0.3||first[1]<MID-100) h+=`<text class="cap" x="${first[0]-10}" y="${first[1]-12}" style="fill:var(--U)">합성된 RNA</text>`;
+  }
+  if(showArrow){
+    const ax=X(st.px)-40;
+    h+=`<path class="arrow" d="M${ax} ${MID+140} h80 m-8 -5 l8 5 l-8 5"/><text class="arrowtxt" x="${ax+92}" y="${MID+144}">전사 방향</text>`;
+  }
+  svg.innerHTML=h;
+}
+
+/* ---------- narration ---------- */
+function narr(i){
+  const st=S[i];
+  if(i===0) return {stage:0,t:'준비 — DNA 이중 나선',b:'유전자가 발현되려면 먼저 DNA의 유전 정보가 RNA로 전달되는 전사가 일어나야 합니다. RNA 중합 효소가 결합할 자리를 찾고 있습니다.'};
+  if(i===1) return {stage:1,t:'RNA 중합 효소가 프로모터에 결합',b:'전사는 프로모터라고 하는 DNA의 특정 염기 서열에 RNA 중합 효소가 결합하면서 시작됩니다.',note:'프로모터: RNA 중합 효소가 결합하여 전사가 시작되는 DNA의 특정 염기 서열. 일반적으로 전사될 유전자의 DNA 염기 서열 앞부분에 위치합니다.'};
+  if(i===2) return {stage:1,t:'DNA 이중 나선이 풀린다',b:'RNA 중합 효소가 DNA 이중 나선을 단일 가닥으로 풉니다. 분리된 두 가닥 중 한쪽 가닥(주형 가닥)만 RNA 합성의 주형으로 쓰입니다.',note:'RNA 중합 효소: RNA 합성을 촉매하는 효소'};
+  if(i>=ELO0&&i<=ELO1){
+    const k=st.rna, c=START+k-1, tb=TEMPLATE[c], rb=RNA[k-1];
+    let b=`주형 가닥의 ${tb}(${NAME[tb]})에 상보적인 ${rb}(${NAME[rb]}) 뉴클레오타이드가 RNA의 3′ 말단에 결합했습니다. RNA는 5′→3′ 방향으로 자랍니다. (${k}/${GLEN})`;
+    let note=null;
+    if(tb==='A') note='주형 가닥의 A에 상보적으로 결합하는 RNA의 염기는 T가 아니라 U입니다.';
+    else if(k===1) note='RNA는 주형 가닥과 상보적인 염기를 가진 뉴클레오타이드를 차례로 결합하여 합성되며, 합성된 RNA와 주형 가닥의 방향성은 서로 반대입니다.';
+    return {stage:2,t:'RNA 신장 — 뉴클레오타이드 결합',b,note};
+  }
+  if(i===LAST-1) return {stage:3,t:'종결 부위 도달',b:'RNA 합성이 끝나는 부분에 이르렀습니다. RNA 중합 효소가 지나간 뒤의 DNA는 다시 이중 나선을 형성합니다.'};
+  return {stage:3,t:'RNA와 RNA 중합 효소 분리',b:`전사가 끝나면 합성된 RNA와 RNA 중합 효소가 DNA에서 분리됩니다. 완성된 RNA: 5′-${RNA}-3′`,note:'이 RNA는 비주형 가닥(5′-'+GENE+'-3′)과 같은 서열이고, T 대신 U가 들어 있습니다.'};
+}
+
+/* ---------- controller ---------- */
+let step=0, cur={...S[0]}, from=null, to=null, t0=0, dur=700, raf=0, playing=false, playTimer=0;
+let mode='auto', mistakes=0, speed=1;
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $=id=>document.getElementById(id);
+
+function nextHL(){ return (mode==='man' && step>=2 && step<ELO1) ? START+S[step].rna : null; }
+function render(){ draw(cur,nextHL(), step>=2&&step<LAST); }
+function tick(now){
+  const t=clamp((now-t0)/dur,0,1), e=t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+  for(const k in to) cur[k]=lerp(from[k],to[k],e);
+  render();
+  if(t<1) raf=requestAnimationFrame(tick); else raf=0;
+}
+function goTo(i){
+  i=clamp(i,0,LAST); if(i===step&&!raf) { update(); return; }
+  step=i; from={...cur}; to={...S[i]};
+  dur=(reduce?1:(i===LAST?1300:700))/speed; t0=performance.now();
+  cancelAnimationFrame(raf); raf=requestAnimationFrame(tick);
+  update();
+}
+function needsPick(){ return mode==='man' && step>=2 && step<ELO1; }
+function update(){
+  const n=narr(step);
+  $('nNum').textContent=`단계 ${step} / ${LAST}`;
+  $('nTitle').textContent=n.t; $('nBody').textContent=n.b;
+  $('nNote').hidden=!n.note; if(n.note) $('nNote').textContent=n.note;
+  document.querySelectorAll('.stage').forEach(el=>{
+    const s=+el.dataset.s; el.classList.toggle('on',s===n.stage); el.classList.toggle('done',s<n.stage);
+  });
+  $('b-prev').disabled=step===0;
+  $('b-next').disabled=step===LAST || needsPick();
+  $('b-play').disabled=mode==='man';
+  $('b-play').textContent=playing?'일시정지':(step===LAST?'다시 재생':'재생');
+  // pad
+  $('pad').hidden=mode!=='man';
+  if(mode==='man'){
+    const keys=document.querySelectorAll('.key');
+    if(needsPick()){
+      const tb=TEMPLATE[START+S[step].rna];
+      $('padQ').innerHTML=`주형 가닥의 <b class="c${tb}">${tb}</b>(${NAME[tb]})에 결합할 RNA 뉴클레오타이드는?`;
+      keys.forEach(k=>k.disabled=false);
+    } else {
+      keys.forEach(k=>k.disabled=true);
+      $('padQ').textContent= step<2 ? '‘다음’을 눌러 개시 단계를 진행하세요. 이중 나선이 풀리면 직접 염기를 고를 수 있습니다.'
+        : step>=LAST ? `RNA 완성! 실수 ${mistakes}회 — ${mistakes===0?'완벽해요.':'‘처음으로’를 눌러 다시 도전해 보세요.'}`
+        : '신장이 끝났습니다. ‘다음’을 눌러 종결 단계를 확인하세요.';
+    }
+  }
+  renderSeq(); render();
+}
+function renderSeq(){
+  const k=S[step].rna, curC=(step>=ELO0&&step<=ELO1)?START+k-1:(needsPick()?START+k:-1);
+  const row=(lab,l,str,r,isRna)=>{
+    let s=`<div class="seqrow"><span class="lab">${lab}</span><span class="dir">${l}</span><span>`;
+    for(let c=0;c<N;c++){
+      let ch=str[c]||' ';
+      const cls=['ch'];
+      if(c>=START&&c<=END) cls.push('g');
+      if(c===curC) cls.push('cur');
+      s+= ch===' ' ? `<span class="${cls.join(' ')}">&nbsp;</span>` : `<span class="${cls.join(' ')} c${ch}">${ch}</span>`;
+    }
+    return s+`</span><span class="dir">${r}</span></div>`;
+  };
+  let rnaStr=''; for(let c=0;c<N;c++) rnaStr+= (c>=START && c-START<k) ? RNA[c-START] : ' ';
+  $('seq').innerHTML=row('비주형 가닥',"5′",CODING,"3′")+row('주형 가닥',"3′",TEMPLATE,"5′")+row('RNA',"5′",rnaStr,"3′",true);
+}
+
+function pick(b){
+  if(!needsPick()) return;
+  const tb=TEMPLATE[START+S[step].rna], need=TO_RNA[tb], fb=$('fb');
+  fb.hidden=false;
+  if(b===need){
+    fb.className='fb ok'; fb.textContent=`정답! 주형 ${tb} ↔ RNA ${need}${tb==='A'?' (T가 아닌 U)':''}`;
+    goTo(step+1);
+  } else {
+    mistakes++; fb.className='fb bad';
+    if(b==='T') fb.textContent='RNA에는 티민(T)이 없어요. RNA의 염기는 A, G, C, U(우라실) 4종류입니다.';
+    else if(b===tb) fb.textContent=`같은 염기끼리는 짝을 이루지 않아요. ${tb}와 상보적인 염기를 찾아보세요.`;
+    else fb.textContent=`${b}는 ${tb}와 상보적이지 않아요. RNA에서는 A–U, G–C가 짝을 이룹니다.`;
+  }
+}
+
+function stopPlay(){ playing=false; clearTimeout(playTimer); update(); }
+function playLoop(){
+  if(!playing) return;
+  if(step>=LAST){ stopPlay(); return; }
+  goTo(step+1);
+  playTimer=setTimeout(playLoop,(step===LAST?1500:(step<=2||step>=ELO1?1500:900))/speed);
+}
+$('b-play').onclick=()=>{
+  if(playing){ stopPlay(); return; }
+  if(step===LAST){ cur={...S[0]}; step=0; }
+  playing=true; update(); playTimer=setTimeout(playLoop,200);
+};
+$('b-next').onclick=()=>{ stopPlay(); goTo(step+1); };
+$('b-prev').onclick=()=>{ stopPlay(); $('fb').hidden=true; goTo(step-1); };
+$('b-reset').onclick=()=>{ stopPlay(); mistakes=0; $('fb').hidden=true; goTo(0); };
+function setMode(m){
+  mode=m; stopPlay();
+  $('m-auto').setAttribute('aria-pressed',m==='auto'); $('m-man').setAttribute('aria-pressed',m==='man');
+  $('fb').hidden=true;
+  if(m==='man'){ mistakes=0; cur={...S[0]}; step=0; }
+  update();
+}
+$('m-auto').onclick=()=>setMode('auto'); $('m-man').onclick=()=>setMode('man');
+$('spd').oninput=e=>{ speed=+e.target.value; $('spdv').textContent=speed+'×'; };
+// keys
+['A','U','G','C','T'].forEach(b=>{
+  const k=document.createElement('button'); k.className='key'; k.style.background=`var(--${b})`;
+  k.innerHTML=`${b}<small>${NAME[b]}</small>`; k.setAttribute('aria-label',`${b} ${NAME[b]}`);
+  k.onclick=()=>pick(b); $('keys').appendChild(k);
+});
+document.addEventListener('keydown',e=>{
+  if($('p-sim').hidden || e.target.tagName==='INPUT') return;
+  const K=e.key.toUpperCase();
+  if(mode==='man' && 'AUGCT'.includes(K) && K.length===1){ pick(K); return; }
+  if(e.key==='ArrowRight' && !$('b-next').disabled){ $('b-next').click(); }
+  if(e.key==='ArrowLeft' && !$('b-prev').disabled){ $('b-prev').click(); }
+});
+
+/* ---------- tabs ---------- */
+const tabs=[['t-sim','p-sim'],['t-prac','p-prac'],['t-quiz','p-quiz']];
+tabs.forEach(([t,p])=>$(t).onclick=()=>{
+  tabs.forEach(([t2,p2])=>{ $(t2).setAttribute('aria-selected',t2===t); $(p2).hidden=t2!==t; if(t2===t) $(p2).style.display='flex'; });
+  if(t!=='t-sim') stopPlay();
+});
+
+/* ---------- practice ---------- */
+let pq=null, pRight=0, pStreak=0, pDone=false;
+const P5="5′", P3="3′";
+function makeQ(seq,tDir,aDir){
+  // tDir/aDir: '53' or '35' (order of writing, left to right)
+  const compSame=[...seq].map(b=>TO_RNA[b]).join(''); // RNA read in same order -> opposite direction
+  const sameDir = tDir==='53' ? '35' : '53';
+  const ans = aDir===sameDir ? compSame : [...compSame].reverse().join('');
+  return {seq,tDir,aDir,compSame,sameDir,ans};
+}
+function dirEnds(d){ return d==='53'?[P5,P3]:[P3,P5]; }
+function showQ(q){
+  pq=q; pDone=false;
+  const [l,r]=dirEnds(q.tDir), [al,ar]=dirEnds(q.aDir);
+  $('pGiven').innerHTML=`<span class="lbl">DNA 주형 가닥</span>${l}-${q.seq}-${r}`;
+  $('pAsk').textContent=`이 주형 가닥으로부터 전사된 mRNA의 염기 서열을 ${al}→${ar} 방향으로 쓰시오.`;
+  $('pL').textContent=al+'-'; $('pR').textContent='-'+ar;
+  $('pIn').value=''; $('pFb').hidden=true; $('pExp').hidden=true;
+}
+function newQ(){
+  let s=''; for(let i=0;i<10;i++) s+='ACGT'[Math.floor(Math.random()*4)];
+  showQ(makeQ(s, Math.random()<.5?'53':'35', Math.random()<.5?'53':'35'));
+}
+function explain(){
+  const q=pq, [l,r]=dirEnds(q.tDir), [sl,sr]=dirEnds(q.sameDir), [al,ar]=dirEnds(q.aDir);
+  let h=`<div>① 주형 가닥 <code>${l}-${q.seq}-${r}</code>의 각 염기에 상보적인 RNA 염기를 같은 순서로 쓰면 (A→U, T→A, G→C, C→G)</div>`;
+  h+=`<div>&nbsp;&nbsp;&nbsp;→ <code>${sl}-${q.compSame}-${sr}</code> (방향은 주형과 반대)</div>`;
+  if(q.aDir!==q.sameDir) h+=`<div>② 문제에서 ${al}→${ar} 방향을 요구하므로 순서를 뒤집으면 → <code>${al}-${q.ans}-${ar}</code></div>`;
+  else h+=`<div>② 요구한 방향(${al}→${ar})과 같으므로 그대로 답이 됩니다.</div>`;
+  $('pExp').innerHTML=h; $('pExp').hidden=false;
+}
+$('pForm').onsubmit=e=>{
+  e.preventDefault();
+  const v=$('pIn').value.toUpperCase().replace(/[^A-Z]/g,''), fb=$('pFb'); fb.hidden=false;
+  if(!v){ fb.className='fb info'; fb.textContent='염기 서열을 입력하세요.'; return; }
+  if(v.includes('T')){ fb.className='fb bad'; fb.textContent='RNA에는 T가 없어요. T 자리를 U로 바꿔 보세요.'; return; }
+  if(v===pq.ans){
+    fb.className='fb ok'; fb.textContent='정답입니다!';
+    if(!pDone){ pRight++; pStreak++; } pDone=true; explain();
+  } else {
+    pStreak=0;
+    const rev=[...v].reverse().join('');
+    fb.className='fb bad';
+    fb.textContent = rev===pq.ans ? '염기는 맞았지만 방향이 반대예요. 5′, 3′ 위치를 다시 확인하세요.'
+      : v.length!==pq.ans.length ? `염기 수가 ${v.length}개예요. 주형 가닥은 ${pq.ans.length}개입니다.` : '다시 확인해 보세요. A–U, T–A, G–C, C–G 짝과 방향을 함께 보세요.';
+  }
+  $('pStat').textContent=`맞힌 문제 ${pRight} · 연속 정답 ${pStreak}`;
+};
+$('pShow').onclick=()=>{ $('pIn').value=pq.ans; pDone=true; pStreak=0; $('pFb').hidden=true; explain(); $('pStat').textContent=`맞힌 문제 ${pRight} · 연속 정답 ${pStreak}`; };
+$('pNew').onclick=newQ;
+// first question = textbook example
+showQ(makeQ('GAACTTAGCT','53','35'));
+
+/* ---------- quiz ---------- */
+const QZ=[
+  {q:'RNA 중합 효소가 결합하여 전사가 시작되는 DNA의 특정 염기 서열은?',o:['프로모터','리보솜','주형 가닥','종결 부위'],a:0,e:'프로모터는 일반적으로 전사될 유전자의 DNA 염기 서열 앞부분에 위치합니다.'},
+  {q:'RNA 중합 효소가 뉴클레오타이드를 결합하여 RNA를 합성하는 방향은?',o:['3′→5′','5′→3′','양방향','주형 가닥과 같은 방향'],a:1,e:'RNA는 5′→3′ 방향으로 합성되며, 주형 가닥과 방향성이 반대입니다.'},
+  {q:'전사가 일어날 때 DNA 주형 가닥의 A에 상보적으로 결합하는 RNA의 염기는?',o:['T','A','U','G'],a:2,e:'RNA에는 T가 없고 U(우라실)가 있습니다.'},
+  {q:'RNA의 뉴클레오타이드를 구성하는 당은?',o:['디옥시리보스','리보스','포도당','과당'],a:1,e:'DNA의 당은 디옥시리보스, RNA의 당은 리보스입니다.'},
+  {q:'전사 과정에서 RNA 합성의 주형으로 쓰이는 것은?',o:['DNA 두 가닥 모두','DNA 두 가닥 중 한쪽 가닥','mRNA','tRNA'],a:1,e:'분리된 두 가닥 중 한쪽 가닥만 주형으로 사용됩니다.'},
+  {q:'단백질을 합성하는 세포 소기관인 리보솜을 구성하는 RNA는?',o:['mRNA','tRNA','rRNA'],a:2,e:'rRNA는 리보솜을 구성합니다.'},
+  {q:'단백질 합성에 필요한 아미노산을 리보솜으로 운반하는 RNA는?',o:['mRNA','tRNA','rRNA'],a:1,e:'tRNA(transfer RNA)가 아미노산을 운반합니다.'},
+  {q:'DNA 주형 가닥이 5′-GAACTTAGCT-3′일 때 전사된 mRNA의 염기 서열은?',o:["3′-CUUGAAUCGA-5′","5′-CUUGAAUCGA-3′","3′-CTTGAATCGA-5′","5′-GAACUUAGCU-3′"],a:0,e:'상보적 염기를 같은 순서로 쓰고, 방향은 주형과 반대로 표시합니다.'}
+];
+let qAns={};
+function renderQuiz(){
+  const L=$('qList'); L.innerHTML='';
+  QZ.forEach((it,i)=>{
+    const d=document.createElement('div'); d.className='panel qitem';
+    d.innerHTML=`<p>${i+1}. ${it.q}</p><div class="opts"></div><p class="qexp" hidden></p>`;
+    const opts=d.querySelector('.opts'), ex=d.querySelector('.qexp');
+    it.o.forEach((o,j)=>{
+      const b=document.createElement('button'); b.className='opt'; b.textContent=o;
+      b.onclick=()=>{
+        if(qAns[i]!==undefined) return;
+        qAns[i]=j;
+        [...opts.children].forEach((x,k)=>{ x.disabled=true; if(k===it.a) x.classList.add('right'); });
+        if(j!==it.a) b.classList.add('wrong');
+        ex.textContent=(j===it.a?'정답 · ':'오답 · ')+it.e; ex.hidden=false;
+        score();
+      };
+      opts.appendChild(b);
+    });
+    L.appendChild(d);
+  });
+  score();
+}
+function score(){ const c=Object.entries(qAns).filter(([i,j])=>QZ[i].a===j).length; $('qScore').textContent=`${c} / ${QZ.length}`; }
+$('qReset').onclick=()=>{ qAns={}; renderQuiz(); };
+renderQuiz();
+
+update();
+})();
+</script>
+
+</body></html>
